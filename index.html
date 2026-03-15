@@ -5,198 +5,633 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Calorie Tracker Pro</title>
 
-<!-- PWA + iPhone App Settings -->
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#22c55e">
+<meta name="theme-color" content="#a3e635">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Calories">
 <link rel="apple-touch-icon" href="icon.png">
 
-<!-- Firebase SDK -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
 <style>
-:root{
---bg:#0f172a;
---card:#1e293b;
---accent:#22c55e;
---red:#ef4444;
---yellow:#f59e0b;
---text:#f1f5f9;
---muted:#94a3b8;
+:root {
+  --bg: #0a0f0d;
+  --card: #111a14;
+  --card2: #162019;
+  --border: #1e3024;
+  --accent: #a3e635;
+  --accent2: #4ade80;
+  --red: #f87171;
+  --yellow: #fbbf24;
+  --text: #e8f5e9;
+  --muted: #4d6b55;
+  --mono: 'Space Mono', monospace;
+  --sans: 'DM Sans', sans-serif;
 }
 
-*{box-sizing:border-box}
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
-body{
-margin:0;
-font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;
-background:var(--bg);
-color:var(--text);
-padding:18px;
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 20px 16px 40px;
 }
 
-.container{max-width:1100px;margin:auto}
-
-h1{margin-top:0;font-size:32px}
-
-.card{
-background:var(--card);
-padding:20px;
-border-radius:18px;
-margin-bottom:20px;
-box-shadow:0 12px 30px rgba(0,0,0,.35);
+/* subtle grid bg */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(163,230,53,.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(163,230,53,.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
 }
 
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
-
-@media(max-width:850px){
-.grid{grid-template-columns:1fr}
+.container {
+  max-width: 1100px;
+  margin: auto;
+  position: relative;
+  z-index: 1;
 }
 
-.stat-big{
-font-size:32px;
-font-weight:700
+/* ── HEADER ── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
-.progress{
-height:18px;
-background:#334155;
-border-radius:999px;
-overflow:hidden;
-margin-top:12px
+.header h1 {
+  font-family: var(--mono);
+  font-size: clamp(20px, 5vw, 30px);
+  color: var(--accent);
+  letter-spacing: -1px;
 }
 
-.progress-bar{
-height:100%;
-background:var(--accent);
-width:0%
+.header h1 span { color: var(--text); }
+
+.status-pill {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 14px;
+  color: var(--muted);
+  letter-spacing: .5px;
 }
 
-input,button{
-padding:10px 12px;
-border-radius:10px;
-border:none;
-font-size:15px
+.status-pill.live { color: var(--accent); }
+.status-pill.live::before {
+  content: '● ';
+  animation: blink 1.4s infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+
+/* ── CARDS ── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 24px;
+  margin-bottom: 20px;
 }
 
-button{
-background:var(--accent);
-color:black;
-font-weight:600;
-cursor:pointer
+.card-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 16px;
 }
 
-.quick-buttons button{margin:4px}
+/* ── MAIN CALORIES CARD ── */
+.cal-stats {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
 
-.meal{display:flex;justify-content:space-between;padding:4px 0}
+.stat-box {
+  flex: 1;
+  min-width: 90px;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
 
-.calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:10px}
+.stat-box .label {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 4px;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
 
-.day{height:28px;border-radius:6px;background:#334155}
+.stat-box .value {
+  font-family: var(--mono);
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text);
+}
 
-.green{background:var(--accent)}
-.red{background:var(--red)}
+.stat-box.highlight .value { color: var(--accent); }
+.stat-box.over .value { color: var(--red); }
 
-.timer{font-size:20px;font-weight:600}
+/* ── PROGRESS BAR ── */
+.progress-wrap { margin-bottom: 20px; }
 
-.streak{font-size:18px;font-weight:600;color:var(--accent)}
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--muted);
+  font-family: var(--mono);
+  margin-bottom: 8px;
+}
 
-.pace{font-size:14px;margin-top:10px;padding:10px;background:#020617;border-radius:10px}
+.progress {
+  height: 10px;
+  background: #1a2e1f;
+  border-radius: 999px;
+  overflow: hidden;
+}
 
-.guide{margin-top:10px;font-size:14px;background:#020617;padding:12px;border-radius:10px}
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent2), var(--accent));
+  width: 0%;
+  transition: width .4s ease;
+  border-radius: 999px;
+}
 
-canvas{width:100%;background:#020617;border-radius:12px;padding:10px}
+.progress-bar.over { background: linear-gradient(90deg, var(--yellow), var(--red)); }
 
-.small{color:var(--muted);font-size:13px}
+/* ── INPUT ROW ── */
+.input-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.input-row input {
+  flex: 1;
+  min-width: 120px;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 15px;
+  padding: 12px 14px;
+  outline: none;
+  transition: border-color .2s;
+}
+
+.input-row input:focus { border-color: var(--accent); }
+.input-row input::placeholder { color: var(--muted); }
+
+.btn {
+  background: var(--accent);
+  color: #0a0f0d;
+  border: none;
+  border-radius: 12px;
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 700;
+  padding: 12px 20px;
+  cursor: pointer;
+  transition: opacity .15s, transform .1s;
+  white-space: nowrap;
+}
+
+.btn:hover { opacity: .88; }
+.btn:active { transform: scale(.97); }
+.btn.ghost {
+  background: var(--card2);
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+
+/* ── QUICK BUTTONS ── */
+.quick-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.quick-buttons .btn {
+  font-size: 13px;
+  padding: 8px 14px;
+  background: var(--card2);
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+
+.quick-buttons .btn:hover { background: var(--accent); color: #0a0f0d; border-color: var(--accent); }
+
+/* ── INFO BOXES ── */
+.info-row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.info-box {
+  flex: 1;
+  min-width: 140px;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.info-box .info-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+/* ── GRID ── */
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media(max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+
+/* ── MEALS ── */
+.meal-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 15px;
+}
+
+.meal-row:last-child { border-bottom: none; }
+
+.meal-icon { margin-right: 8px; }
+
+.meal-cal {
+  font-family: var(--mono);
+  color: var(--accent);
+  font-size: 15px;
+}
+
+/* ── TODAY STATS ── */
+.today-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.today-stat {
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.today-stat .t-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.today-stat .t-value {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.today-stat .t-sub {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* ── WEIGHT ── */
+.weight-input-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.weight-input-row input {
+  flex: 1;
+  min-width: 120px;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 15px;
+  padding: 12px 14px;
+  outline: none;
+  transition: border-color .2s;
+}
+
+.weight-input-row input:focus { border-color: var(--accent); }
+.weight-input-row input::placeholder { color: var(--muted); }
+
+canvas {
+  width: 100%;
+  display: block;
+  background: var(--card2);
+  border-radius: 14px;
+  border: 1px solid var(--border);
+}
+
+/* ── CALENDAR ── */
+.cal-header {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.cal-day-name {
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+
+.calendar {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+}
+
+.day {
+  aspect-ratio: 1;
+  border-radius: 8px;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  transition: transform .1s;
+  cursor: default;
+}
+
+.day:hover { transform: scale(1.1); }
+.day.green { background: #1a3d1a; border-color: var(--accent2); color: var(--accent); }
+.day.red { background: #3d1a1a; border-color: var(--red); color: var(--red); }
+.day.today-marker { box-shadow: 0 0 0 2px var(--accent); }
+
+/* ── TOAST ── */
+#toast {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%) translateY(80px);
+  background: var(--accent);
+  color: #0a0f0d;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 12px 22px;
+  border-radius: 999px;
+  z-index: 999;
+  transition: transform .3s ease;
+  pointer-events: none;
+}
+
+#toast.show { transform: translateX(-50%) translateY(0); }
+
+/* ── LOADING ── */
+#loading {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  gap: 16px;
+}
+
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+#loading p {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* ── MEAL SELECT ── */
+.meal-select-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.meal-select-row .btn {
+  font-size: 12px;
+  padding: 7px 13px;
+  background: var(--card2);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.meal-select-row .btn.active {
+  background: var(--accent);
+  color: #0a0f0d;
+  border-color: var(--accent);
+}
 
 </style>
 </head>
 <body>
 
+<!-- Loading overlay -->
+<div id="loading">
+  <div class="spinner"></div>
+  <p>Loading your data...</p>
+</div>
+
+<div id="toast"></div>
+
 <div class="container">
 
-<h1>Calorie Tracker Pro</h1>
+  <!-- Header -->
+  <div class="header">
+    <h1>Calorie<span>Pro</span></h1>
+    <div class="status-pill live" id="syncStatus">synced</div>
+  </div>
 
-<div class="card">
-<h2>Daily Calories</h2>
+  <!-- Main Calorie Card -->
+  <div class="card">
+    <div class="card-label">Daily Calories</div>
 
-<div>Goal: <span id="goal">2700</span></div>
-<div>Eaten: <span id="eaten">0</span></div>
-<div class="stat-big">Remaining: <span id="remaining">2700</span></div>
+    <div class="cal-stats">
+      <div class="stat-box">
+        <div class="label">Goal</div>
+        <div class="value" id="goal">2700</div>
+      </div>
+      <div class="stat-box">
+        <div class="label">Eaten</div>
+        <div class="value" id="eaten">0</div>
+      </div>
+      <div class="stat-box highlight" id="remainingBox">
+        <div class="label">Remaining</div>
+        <div class="value" id="remaining">2700</div>
+      </div>
+    </div>
 
-<div class="progress"><div id="progress" class="progress-bar"></div></div>
+    <div class="progress-wrap">
+      <div class="progress-header">
+        <span>Progress</span>
+        <span id="pct">0%</span>
+      </div>
+      <div class="progress">
+        <div id="progressBar" class="progress-bar"></div>
+      </div>
+    </div>
 
-<br>
+    <!-- Meal selector -->
+    <div class="card-label" style="margin-bottom:8px">Add to meal</div>
+    <div class="meal-select-row">
+      <button class="btn active" id="mBtn-breakfast" onclick="selectMeal('breakfast')">🌅 Breakfast</button>
+      <button class="btn" id="mBtn-lunch" onclick="selectMeal('lunch')">☀️ Lunch</button>
+      <button class="btn" id="mBtn-dinner" onclick="selectMeal('dinner')">🌙 Dinner</button>
+      <button class="btn" id="mBtn-snacks" onclick="selectMeal('snacks')">🍎 Snacks</button>
+    </div>
 
-<input id="calInput" type="number" placeholder="Calories">
-<button onclick="addCalories()">Add</button>
+    <div class="input-row">
+      <input id="calInput" type="number" placeholder="Enter calories" inputmode="numeric">
+      <button class="btn" onclick="addCalories()">Add</button>
+    </div>
 
-<div class="quick-buttons">
-<button onclick="quickAdd(200)">+200</button>
-<button onclick="quickAdd(400)">+400</button>
-<button onclick="quickAdd(600)">+600</button>
-<button onclick="quickAdd(800)">+800</button>
-</div>
+    <div class="quick-buttons">
+      <button class="btn" onclick="quickAdd(100)">+100</button>
+      <button class="btn" onclick="quickAdd(200)">+200</button>
+      <button class="btn" onclick="quickAdd(400)">+400</button>
+      <button class="btn" onclick="quickAdd(600)">+600</button>
+      <button class="btn" onclick="quickAdd(800)">+800</button>
+    </div>
 
-<div id="pace" class="pace"></div>
+    <div class="info-row">
+      <div class="info-box">
+        <div class="info-label">Pace</div>
+        <div id="pace">—</div>
+      </div>
+      <div class="info-box">
+        <div class="info-label">Guide</div>
+        <div id="guide">—</div>
+      </div>
+    </div>
 
-<div id="guide" class="guide"></div>
+  </div>
 
-</div>
+  <!-- Grid: Meals + Today -->
+  <div class="grid">
 
-<div class="grid">
+    <div class="card">
+      <div class="card-label">Meals Today</div>
+      <div class="meal-row"><span><span class="meal-icon">🌅</span>Breakfast</span><span class="meal-cal" id="breakfast">0</span></div>
+      <div class="meal-row"><span><span class="meal-icon">☀️</span>Lunch</span><span class="meal-cal" id="lunch">0</span></div>
+      <div class="meal-row"><span><span class="meal-icon">🌙</span>Dinner</span><span class="meal-cal" id="dinner">0</span></div>
+      <div class="meal-row"><span><span class="meal-icon">🍎</span>Snacks</span><span class="meal-cal" id="snacks">0</span></div>
 
-<div class="card">
-<h2>Meals</h2>
+      <div style="margin-top:16px">
+        <button class="btn ghost" onclick="resetToday()" style="font-size:12px;padding:8px 14px">Reset Today</button>
+      </div>
+    </div>
 
-<div class="meal">Breakfast <span id="breakfast">0</span></div>
-<div class="meal">Lunch <span id="lunch">0</span></div>
-<div class="meal">Dinner <span id="dinner">0</span></div>
-<div class="meal">Snacks <span id="snacks">0</span></div>
+    <div class="card">
+      <div class="card-label">Stats</div>
+      <div class="today-grid">
+        <div class="today-stat">
+          <div class="t-label">Time Left</div>
+          <div class="t-value" id="timer">--:--</div>
+          <div class="t-sub">until midnight</div>
+        </div>
+        <div class="today-stat">
+          <div class="t-label">Streak</div>
+          <div class="t-value" id="streak">0</div>
+          <div class="t-sub">days at goal</div>
+        </div>
+        <div class="today-stat">
+          <div class="t-label">7-Day Avg</div>
+          <div class="t-value" id="weeklyAvg">0</div>
+          <div class="t-sub">calories/day</div>
+        </div>
+        <div class="today-stat">
+          <div class="t-label">Today</div>
+          <div class="t-value" id="todayDate">—</div>
+          <div class="t-sub" id="todayMonth"></div>
+        </div>
+      </div>
+    </div>
 
-</div>
+  </div>
 
-<div class="card">
-<h2>Today</h2>
+  <!-- Weight -->
+  <div class="card">
+    <div class="card-label">Weight Progress</div>
+    <div class="weight-input-row">
+      <input id="weightInput" type="number" placeholder="Enter weight (lbs)" inputmode="decimal" step="0.1">
+      <button class="btn" onclick="addWeight()">Log Weight</button>
+    </div>
+    <canvas id="weightChart" height="180"></canvas>
+  </div>
 
-<div class="timer" id="timer"></div>
-
-<h3>Streak</h3>
-<div id="streak" class="streak">0 days</div>
-
-<h3>Weekly Avg Calories</h3>
-<div id="weeklyAvg">0</div>
-
-</div>
-
-</div>
-
-<div class="card">
-<h2>Weight Progress</h2>
-
-<input id="weightInput" type="number" placeholder="Weight">
-<button onclick="addWeight()">Log Weight</button>
-
-<canvas id="weightChart" height="220"></canvas>
-
-<div class="small">Track your weight to monitor bulking progress</div>
-
-</div>
-
-<div class="card">
-<h2>Calendar</h2>
-<div id="calendar" class="calendar"></div>
-</div>
+  <!-- Calendar -->
+  <div class="card">
+    <div class="card-label">Monthly Calendar — <span id="calMonth"></span></div>
+    <div class="cal-header">
+      <div class="cal-day-name">SUN</div>
+      <div class="cal-day-name">MON</div>
+      <div class="cal-day-name">TUE</div>
+      <div class="cal-day-name">WED</div>
+      <div class="cal-day-name">THU</div>
+      <div class="cal-day-name">FRI</div>
+      <div class="cal-day-name">SAT</div>
+    </div>
+    <div id="calendar" class="calendar"></div>
+  </div>
 
 </div>
 
 <script>
 
-// ================= FIREBASE SETUP =================
-
+// ── FIREBASE ──
 const firebaseConfig = {
   apiKey: "AIzaSyDcjrTVtXgdkdSB04JKjTxKRMyb6tL0_pQ",
   authDomain: "calorie-tracker-83e1b.firebaseapp.com",
@@ -209,255 +644,383 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-// ================= DATA STORAGE =================
+// ── CONSTANTS ──
+const GOAL = 2700;
 
-const GOAL = 2700
+// ── STATE ──
+let store = { days: {}, weights: [] };
+let activeMeal = 'breakfast';
+let saveTimeout = null;
 
-let store = {days:{},weights:[]}
+// ── DATE HELPERS ──
+function dateKey(d) {
+  return d.getFullYear() + "-" + (d.getMonth()+1) + "-" + d.getDate();
+}
+function todayKey() { return dateKey(new Date()); }
 
-function key(date){
-return date.getFullYear()+"-"+(date.getMonth()+1)+"-"+date.getDate()
+function ensureToday() {
+  if (!store.days[todayKey()]) {
+    store.days[todayKey()] = { eaten: 0, meals: { breakfast: 0, lunch: 0, dinner: 0, snacks: 0 } };
+  }
 }
 
-function today(){ return key(new Date()) }
-
-async function loadData(){
-
-let doc = await db.collection("tracker").doc("data").get()
-
-if(doc.exists) store = doc.data()
-
-if(!store.days[today()])
-store.days[today()] = {eaten:0,meals:{breakfast:0,lunch:0,dinner:0,snacks:0}}
-
-updateUI()
+// ── FIREBASE LOAD/SAVE ──
+async function loadData() {
+  try {
+    const doc = await db.collection("tracker").doc("data").get();
+    if (doc.exists) store = doc.data();
+    if (!store.weights) store.weights = [];
+    if (!store.days) store.days = {};
+  } catch(e) {
+    console.warn("Firebase load failed, using local state:", e);
+    showToast("Offline mode — data won't sync");
+    setSyncStatus(false);
+  }
+  ensureToday();
+  document.getElementById("loading").style.display = "none";
+  updateUI();
 }
 
-async function save(){
-await db.collection("tracker").doc("data").set(store)
+function scheduleSave() {
+  setSyncStatus(false, "saving…");
+  clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(async () => {
+    try {
+      await db.collection("tracker").doc("data").set(store);
+      setSyncStatus(true);
+    } catch(e) {
+      setSyncStatus(false, "offline");
+    }
+  }, 800);
 }
 
-// ================= CALORIES =================
-
-function addCalories(){
-let val = Number(calInput.value)
-if(!val) return
-
-let day = store.days[today()]
-
-day.eaten += val
-
-if(day.meals.breakfast == 0) day.meals.breakfast += val
-else if(day.meals.lunch == 0) day.meals.lunch += val
-else if(day.meals.dinner == 0) day.meals.dinner += val
-else day.meals.snacks += val
-
-save()
-updateUI()
+function setSyncStatus(ok, msg) {
+  const el = document.getElementById("syncStatus");
+  el.textContent = msg || (ok ? "synced" : "offline");
+  el.className = "status-pill " + (ok ? "live" : "");
 }
 
-function quickAdd(v){
-let day = store.days[today()]
-
-day.eaten += v
-
-day.meals.snacks += v
-
-save()
-updateUI()
+// ── MEAL SELECTOR ──
+function selectMeal(meal) {
+  activeMeal = meal;
+  ['breakfast','lunch','dinner','snacks'].forEach(m => {
+    document.getElementById('mBtn-' + m).classList.toggle('active', m === meal);
+  });
 }
 
-// ================= TIMER =================
-
-function updateTimer(){
-let now = new Date()
-let end = new Date()
-end.setHours(23,59,59,999)
-
-let diff = end - now
-
-let h = Math.floor(diff/1000/60/60)
-let m = Math.floor((diff/1000/60)%60)
-
- timer.innerText = h+"h "+m+"m remaining"
-
- updateGuide(h)
- updatePace()
+// ── ADD CALORIES ──
+function addCalories() {
+  const val = Number(document.getElementById("calInput").value);
+  if (!val || val <= 0) return;
+  ensureToday();
+  store.days[todayKey()].eaten += val;
+  store.days[todayKey()].meals[activeMeal] += val;
+  document.getElementById("calInput").value = "";
+  scheduleSave();
+  updateUI();
+  showToast("+" + val + " cal to " + activeMeal);
 }
 
-// ================= GUIDANCE =================
-
-function updateGuide(hoursLeft){
-let eaten = store.days[today()].eaten
-let remaining = Math.max(GOAL-eaten,0)
-
-let mealsLeft = Math.max(Math.ceil(hoursLeft/3),1)
-let perMeal = Math.round(remaining/mealsLeft)
-
-if(remaining <= 0){
- guide.innerText = "Goal reached today 🎉"
- return
+function quickAdd(v) {
+  ensureToday();
+  store.days[todayKey()].eaten += v;
+  store.days[todayKey()].meals[activeMeal] += v;
+  scheduleSave();
+  updateUI();
+  showToast("+" + v + " cal");
 }
 
-guide.innerText = "Eat about "+perMeal+" calories every ~3 hours ("+mealsLeft+" meals left)."
+function resetToday() {
+  if (!confirm("Reset all calories for today?")) return;
+  store.days[todayKey()] = { eaten: 0, meals: { breakfast: 0, lunch: 0, dinner: 0, snacks: 0 } };
+  scheduleSave();
+  updateUI();
+  showToast("Today reset");
 }
 
-function updatePace(){
-let hour = new Date().getHours()
-
-let expected = (hour/24) * GOAL
-let eaten = store.days[today()].eaten
-
-let diff = eaten - expected
-
-if(diff > 150)
-pace.innerText = "You are ahead of calorie pace 👍"
-
-else if(diff < -150)
-pace.innerText = "You are behind pace — consider eating soon"
-
-else
-pace.innerText = "You are on track for today's goal"
+// ── WEIGHT ──
+function addWeight() {
+  const w = parseFloat(document.getElementById("weightInput").value);
+  if (!w || w <= 0) return;
+  store.weights.push({ date: todayKey(), weight: w });
+  if (store.weights.length > 90) store.weights.shift();
+  document.getElementById("weightInput").value = "";
+  scheduleSave();
+  drawWeightChart();
+  showToast("Weight logged: " + w);
 }
 
-// ================= STATS =================
-
-function updateWeeklyAvg(){
-let total = 0
-let count = 0
-
-for(let i=0;i<7;i++){
-let d = new Date()
-d.setDate(d.getDate()-i)
-
-let k = key(d)
-
-if(store.days[k]){
-total += store.days[k].eaten
-count++
-}
+// ── TIMER ──
+function updateTimer() {
+  const now = new Date();
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+  const diff = end - now;
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  document.getElementById("timer").textContent = h + "h " + String(m).padStart(2,'0') + "m";
+  updateGuide(h);
+  updatePace();
 }
 
-let avg = count ? Math.round(total/count) : 0
-
-weeklyAvg.innerText = avg
+// ── GUIDE / PACE ──
+function updateGuide(hoursLeft) {
+  if (!store.days[todayKey()]) return;
+  const eaten = store.days[todayKey()].eaten;
+  const remaining = Math.max(GOAL - eaten, 0);
+  const el = document.getElementById("guide");
+  if (remaining <= 0) {
+    el.textContent = "🎉 Goal reached!";
+    return;
+  }
+  const mealsLeft = Math.max(Math.ceil(hoursLeft / 3), 1);
+  const perMeal = Math.round(remaining / mealsLeft);
+  el.textContent = "~" + perMeal + " cal per meal (" + mealsLeft + " left)";
 }
 
-function updateStreak(){
-let streak = 0
-let d = new Date()
-
-while(true){
-let k = key(d)
-
-if(store.days[k] && store.days[k].eaten >= GOAL){
-streak++
-d.setDate(d.getDate()-1)
-}else break
+function updatePace() {
+  if (!store.days[todayKey()]) return;
+  const hour = new Date().getHours() + new Date().getMinutes() / 60;
+  const expected = (hour / 24) * GOAL;
+  const eaten = store.days[todayKey()].eaten;
+  const diff = eaten - expected;
+  const el = document.getElementById("pace");
+  if (diff > 150) el.textContent = "Ahead of pace 👍";
+  else if (diff < -150) el.textContent = "Behind pace — eat soon";
+  else el.textContent = "On track ✓";
 }
 
-streakEl = document.getElementById("streak")
-streakEl.innerText = streak + " days"
+// ── WEEKLY AVG ──
+function updateWeeklyAvg() {
+  let total = 0, count = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const k = dateKey(d);
+    if (store.days[k]) { total += store.days[k].eaten; count++; }
+  }
+  document.getElementById("weeklyAvg").textContent = count ? Math.round(total / count) : 0;
 }
 
-// ================= CALENDAR =================
-
-function buildCalendar(){
-calendar.innerHTML = ""
-
-for(let i=1;i<=31;i++){
-let d = document.createElement("div")
-d.className = "day"
-
-let k = new Date().getFullYear()+"-"+(new Date().getMonth()+1)+"-"+i
-
-if(store.days[k]){
-if(store.days[k].eaten >= GOAL)
-d.classList.add("green")
-else
-d.classList.add("red")
+// ── STREAK ──
+function updateStreak() {
+  let streak = 0;
+  const d = new Date();
+  for (let i = 0; i < 365; i++) {
+    const k = dateKey(d);
+    if (store.days[k] && store.days[k].eaten >= GOAL) {
+      streak++;
+      d.setDate(d.getDate() - 1);
+    } else break;
+  }
+  document.getElementById("streak").textContent = streak;
 }
 
-calendar.appendChild(d)
-}
-}
+// ── CALENDAR ──
+function buildCalendar() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const todayNum = now.getDate();
 
-// ================= WEIGHT GRAPH =================
+  const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  document.getElementById("calMonth").textContent = monthNames[month] + " " + year;
 
-function addWeight(){
-let w = Number(weightInput.value)
-if(!w) return
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDay = new Date(year, month, 1).getDay(); // 0=Sun
 
-store.weights.push({date:today(),weight:w})
+  const cal = document.getElementById("calendar");
+  cal.innerHTML = "";
 
-if(store.weights.length > 90)
-store.weights.shift()
+  // empty cells before first day
+  for (let i = 0; i < firstDay; i++) {
+    const empty = document.createElement("div");
+    cal.appendChild(empty);
+  }
 
-save()
-drawWeightChart()
-}
+  for (let i = 1; i <= daysInMonth; i++) {
+    const d = document.createElement("div");
+    d.className = "day";
+    d.textContent = i;
 
-function drawWeightChart(){
-let c = document.getElementById("weightChart")
-let ctx = c.getContext("2d")
+    const k = year + "-" + (month + 1) + "-" + i;
+    if (store.days[k]) {
+      d.classList.add(store.days[k].eaten >= GOAL ? "green" : "red");
+    }
 
-ctx.clearRect(0,0,c.width,c.height)
+    if (i === todayNum) d.classList.add("today-marker");
 
-let data = store.weights
-
-if(data.length < 2) return
-
-let max = Math.max(...data.map(x=>x.weight))
-let min = Math.min(...data.map(x=>x.weight))
-
-for(let i=1;i<data.length;i++){
-
-let x1 = (i-1)/(data.length-1) * c.width
-let x2 = i/(data.length-1) * c.width
-
-let y1 = c.height - ((data[i-1].weight-min)/(max-min))*c.height
-let y2 = c.height - ((data[i].weight-min)/(max-min))*c.height
-
-ctx.beginPath()
-ctx.moveTo(x1,y1)
-ctx.lineTo(x2,y2)
-ctx.stroke()
-}
+    cal.appendChild(d);
+  }
 }
 
-// ================= UI =================
+// ── WEIGHT CHART ──
+function drawWeightChart() {
+  const canvas = document.getElementById("weightChart");
+  const ctx = canvas.getContext("2d");
 
-function updateUI(){
-let day = store.days[today()]
+  // set actual canvas resolution
+  const W = canvas.offsetWidth || 600;
+  const H = 180;
+  canvas.width = W;
+  canvas.height = H;
 
-let eaten = day.eaten
-let remaining = Math.max(GOAL-eaten,0)
+  ctx.clearRect(0, 0, W, H);
 
-goal.innerText = GOAL
+  const data = store.weights;
+  if (data.length < 2) {
+    ctx.fillStyle = "#4d6b55";
+    ctx.font = "13px 'Space Mono'";
+    ctx.textAlign = "center";
+    ctx.fillText("Log at least 2 weights to see your chart", W / 2, H / 2);
+    return;
+  }
 
-document.getElementById("eaten").innerText = eaten
+  const pad = { top: 20, bottom: 30, left: 40, right: 20 };
+  const chartW = W - pad.left - pad.right;
+  const chartH = H - pad.top - pad.bottom;
 
-document.getElementById("remaining").innerText = remaining
+  const weights = data.map(x => x.weight);
+  const maxW = Math.max(...weights);
+  const minW = Math.min(...weights);
+  const range = maxW - minW || 1;
 
-breakfast.innerText = day.meals.breakfast
-lunch.innerText = day.meals.lunch
-dinner.innerText = day.meals.dinner
-snacks.innerText = day.meals.snacks
+  function xPos(i) { return pad.left + (i / (data.length - 1)) * chartW; }
+  function yPos(w) { return pad.top + chartH - ((w - minW) / range) * chartH; }
 
-progress.style.width = (eaten/GOAL*100)+"%"
+  // grid lines
+  ctx.strokeStyle = "#1e3024";
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + (chartH / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(pad.left + chartW, y);
+    ctx.stroke();
+  }
 
-updateWeeklyAvg()
-updateStreak()
-buildCalendar()
-drawWeightChart()
+  // gradient fill
+  const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + chartH);
+  grad.addColorStop(0, "rgba(163,230,53,.25)");
+  grad.addColorStop(1, "rgba(163,230,53,0)");
+
+  ctx.beginPath();
+  ctx.moveTo(xPos(0), yPos(data[0].weight));
+  for (let i = 1; i < data.length; i++) {
+    const x0 = xPos(i-1), y0 = yPos(data[i-1].weight);
+    const x1 = xPos(i), y1 = yPos(data[i].weight);
+    const cx = (x0 + x1) / 2;
+    ctx.bezierCurveTo(cx, y0, cx, y1, x1, y1);
+  }
+  ctx.lineTo(xPos(data.length-1), pad.top + chartH);
+  ctx.lineTo(pad.left, pad.top + chartH);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // line
+  ctx.beginPath();
+  ctx.moveTo(xPos(0), yPos(data[0].weight));
+  for (let i = 1; i < data.length; i++) {
+    const x0 = xPos(i-1), y0 = yPos(data[i-1].weight);
+    const x1 = xPos(i), y1 = yPos(data[i].weight);
+    const cx = (x0 + x1) / 2;
+    ctx.bezierCurveTo(cx, y0, cx, y1, x1, y1);
+  }
+  ctx.strokeStyle = "#a3e635";
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  // dots
+  data.forEach((pt, i) => {
+    ctx.beginPath();
+    ctx.arc(xPos(i), yPos(pt.weight), 4, 0, Math.PI*2);
+    ctx.fillStyle = "#a3e635";
+    ctx.fill();
+    ctx.fillStyle = "#0a0f0d";
+    ctx.beginPath();
+    ctx.arc(xPos(i), yPos(pt.weight), 2, 0, Math.PI*2);
+    ctx.fill();
+  });
+
+  // y-axis labels
+  ctx.fillStyle = "#4d6b55";
+  ctx.font = "10px 'Space Mono'";
+  ctx.textAlign = "right";
+  ctx.fillText(maxW.toFixed(1), pad.left - 4, pad.top + 4);
+  ctx.fillText(minW.toFixed(1), pad.left - 4, pad.top + chartH);
 }
 
-setInterval(updateTimer,1000)
+// ── TOAST ──
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2000);
+}
 
-loadData()
-updateTimer()
+// ── DATE DISPLAY ──
+function updateDateDisplay() {
+  const now = new Date();
+  document.getElementById("todayDate").textContent = now.getDate();
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  document.getElementById("todayMonth").textContent = months[now.getMonth()] + " " + now.getFullYear();
+}
+
+// ── MAIN UI UPDATE ──
+function updateUI() {
+  ensureToday();
+  const day = store.days[todayKey()];
+  const eaten = day.eaten;
+  const remaining = Math.max(GOAL - eaten, 0);
+  const pct = Math.min(Math.round(eaten / GOAL * 100), 100);
+  const over = eaten > GOAL;
+
+  document.getElementById("goal").textContent = GOAL;
+  document.getElementById("eaten").textContent = eaten;
+  document.getElementById("remaining").textContent = over ? "+" + (eaten - GOAL) + " over" : remaining;
+
+  const rBox = document.getElementById("remainingBox");
+  rBox.classList.toggle("over", over);
+  rBox.classList.toggle("highlight", !over);
+
+  const bar = document.getElementById("progressBar");
+  bar.style.width = pct + "%";
+  bar.classList.toggle("over", over);
+
+  document.getElementById("pct").textContent = pct + "%";
+
+  document.getElementById("breakfast").textContent = day.meals.breakfast;
+  document.getElementById("lunch").textContent = day.meals.lunch;
+  document.getElementById("dinner").textContent = day.meals.dinner;
+  document.getElementById("snacks").textContent = day.meals.snacks;
+
+  updateWeeklyAvg();
+  updateStreak();
+  buildCalendar();
+  drawWeightChart();
+  updateDateDisplay();
+}
+
+// ── INIT ──
+setInterval(updateTimer, 1000);
+updateTimer();
+loadData();
+
+// redraw chart on resize
+window.addEventListener("resize", drawWeightChart);
+
+// enter key on calorie input
+document.getElementById("calInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") addCalories();
+});
+
+document.getElementById("weightInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") addWeight();
+});
 
 </script>
-
 </body>
 </html>
