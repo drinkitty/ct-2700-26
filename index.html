@@ -4,6 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Calorie Tracker Pro</title>
+
+<!-- PWA + iPhone App Settings -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#22c55e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Calories">
+<link rel="apple-touch-icon" href="icon.png">
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
 <style>
 :root{
 --bg:#0f172a;
@@ -78,24 +91,11 @@ cursor:pointer
 
 .quick-buttons button{margin:4px}
 
-.meal{
-display:flex;
-justify-content:space-between;
-padding:4px 0
-}
+.meal{display:flex;justify-content:space-between;padding:4px 0}
 
-.calendar{
-display:grid;
-grid-template-columns:repeat(7,1fr);
-gap:6px;
-margin-top:10px
-}
+.calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:10px}
 
-.day{
-height:28px;
-border-radius:6px;
-background:#334155
-}
+.day{height:28px;border-radius:6px;background:#334155}
 
 .green{background:var(--accent)}
 .red{background:var(--red)}
@@ -104,33 +104,13 @@ background:#334155
 
 .streak{font-size:18px;font-weight:600;color:var(--accent)}
 
-.pace{
-font-size:14px;
-margin-top:10px;
-padding:10px;
-background:#020617;
-border-radius:10px
-}
+.pace{font-size:14px;margin-top:10px;padding:10px;background:#020617;border-radius:10px}
 
-.guide{
-margin-top:10px;
-font-size:14px;
-background:#020617;
-padding:12px;
-border-radius:10px
-}
+.guide{margin-top:10px;font-size:14px;background:#020617;padding:12px;border-radius:10px}
 
-canvas{
-width:100%;
-background:#020617;
-border-radius:12px;
-padding:10px
-}
+canvas{width:100%;background:#020617;border-radius:12px;padding:10px}
 
-.small{
-color:var(--muted);
-font-size:13px
-}
+.small{color:var(--muted);font-size:13px}
 
 </style>
 </head>
@@ -215,12 +195,25 @@ font-size:13px
 
 <script>
 
+// ================= FIREBASE SETUP =================
+
+const firebaseConfig = {
+  apiKey: "PASTE_KEY",
+  authDomain: "PASTE_DOMAIN",
+  projectId: "PASTE_PROJECT",
+  storageBucket: "",
+  messagingSenderId: "",
+  appId: ""
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// ================= DATA STORAGE =================
+
 const GOAL = 2700
 
-let store = JSON.parse(localStorage.getItem("trackerPro") || "{}")
-
-if(!store.days) store.days = {}
-if(!store.weights) store.weights = []
+let store = {days:{},weights:[]}
 
 function key(date){
 return date.getFullYear()+"-"+(date.getMonth()+1)+"-"+date.getDate()
@@ -228,13 +221,23 @@ return date.getFullYear()+"-"+(date.getMonth()+1)+"-"+date.getDate()
 
 function today(){ return key(new Date()) }
 
-if(!store.days[today()]){
+async function loadData(){
+
+let doc = await db.collection("tracker").doc("data").get()
+
+if(doc.exists) store = doc.data()
+
+if(!store.days[today()])
 store.days[today()] = {eaten:0,meals:{breakfast:0,lunch:0,dinner:0,snacks:0}}
+
+updateUI()
 }
 
-function save(){
-localStorage.setItem("trackerPro", JSON.stringify(store))
+async function save(){
+await db.collection("tracker").doc("data").set(store)
 }
+
+// ================= CALORIES =================
 
 function addCalories(){
 let val = Number(calInput.value)
@@ -264,6 +267,8 @@ save()
 updateUI()
 }
 
+// ================= TIMER =================
+
 function updateTimer(){
 let now = new Date()
 let end = new Date()
@@ -279,6 +284,8 @@ let m = Math.floor((diff/1000/60)%60)
  updateGuide(h)
  updatePace()
 }
+
+// ================= GUIDANCE =================
 
 function updateGuide(hoursLeft){
 let eaten = store.days[today()].eaten
@@ -296,8 +303,7 @@ guide.innerText = "Eat about "+perMeal+" calories every ~3 hours ("+mealsLeft+" 
 }
 
 function updatePace(){
-let now = new Date()
-let hour = now.getHours()
+let hour = new Date().getHours()
 
 let expected = (hour/24) * GOAL
 let eaten = store.days[today()].eaten
@@ -313,6 +319,8 @@ pace.innerText = "You are behind pace — consider eating soon"
 else
 pace.innerText = "You are on track for today's goal"
 }
+
+// ================= STATS =================
 
 function updateWeeklyAvg(){
 let total = 0
@@ -335,6 +343,25 @@ let avg = count ? Math.round(total/count) : 0
 weeklyAvg.innerText = avg
 }
 
+function updateStreak(){
+let streak = 0
+let d = new Date()
+
+while(true){
+let k = key(d)
+
+if(store.days[k] && store.days[k].eaten >= GOAL){
+streak++
+d.setDate(d.getDate()-1)
+}else break
+}
+
+streakEl = document.getElementById("streak")
+streakEl.innerText = streak + " days"
+}
+
+// ================= CALENDAR =================
+
 function buildCalendar(){
 calendar.innerHTML = ""
 
@@ -355,22 +382,7 @@ calendar.appendChild(d)
 }
 }
 
-function updateStreak(){
-let streak = 0
-let d = new Date()
-
-while(true){
-let k = key(d)
-
-if(store.days[k] && store.days[k].eaten >= GOAL){
-streak++
-d.setDate(d.getDate()-1)
-}else break
-}
-
-streakEl = document.getElementById("streak")
-streakEl.innerText = streak + " days"
-}
+// ================= WEIGHT GRAPH =================
 
 function addWeight(){
 let w = Number(weightInput.value)
@@ -413,17 +425,7 @@ ctx.stroke()
 }
 }
 
-function reminderLoop(){
-let now = new Date()
-
-if(now.getMinutes() == 0){
-let eaten = store.days[today()].eaten
-
-if(eaten < GOAL){
-console.log("Reminder: eat a meal to stay on track")
-}
-}
-}
+// ================= UI =================
 
 function updateUI(){
 let day = store.days[today()]
@@ -451,9 +453,8 @@ drawWeightChart()
 }
 
 setInterval(updateTimer,1000)
-setInterval(reminderLoop,60000)
 
-updateUI()
+loadData()
 updateTimer()
 
 </script>
