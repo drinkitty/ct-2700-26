@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calorie Tracker Pro</title>
+<style>
+:root{
+--bg:#0f172a;
+--card:#1e293b;
+--accent:#22c55e;
+--red:#ef4444;
+--yellow:#f59e0b;
+--text:#f1f5f9;
+--muted:#94a3b8;
+}
+
+*{box-sizing:border-box}
+
+body{
+margin:0;
+font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;
+background:var(--bg);
+color:var(--text);
+padding:18px;
+}
+
+.container{max-width:1100px;margin:auto}
+
+h1{margin-top:0;font-size:32px}
+
+.card{
+background:var(--card);
+padding:20px;
+border-radius:18px;
+margin-bottom:20px;
+box-shadow:0 12px 30px rgba(0,0,0,.35);
+}
+
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+
+@media(max-width:850px){
+.grid{grid-template-columns:1fr}
+}
+
+.stat-big{
+font-size:32px;
+font-weight:700
+}
+
+.progress{
+height:18px;
+background:#334155;
+border-radius:999px;
+overflow:hidden;
+margin-top:12px
+}
+
+.progress-bar{
+height:100%;
+background:var(--accent);
+width:0%
+}
+
+input,button{
+padding:10px 12px;
+border-radius:10px;
+border:none;
+font-size:15px
+}
+
+button{
+background:var(--accent);
+color:black;
+font-weight:600;
+cursor:pointer
+}
+
+.quick-buttons button{margin:4px}
+
+.meal{
+display:flex;
+justify-content:space-between;
+padding:4px 0
+}
+
+.calendar{
+display:grid;
+grid-template-columns:repeat(7,1fr);
+gap:6px;
+margin-top:10px
+}
+
+.day{
+height:28px;
+border-radius:6px;
+background:#334155
+}
+
+.green{background:var(--accent)}
+.red{background:var(--red)}
+
+.timer{font-size:20px;font-weight:600}
+
+.streak{font-size:18px;font-weight:600;color:var(--accent)}
+
+.pace{
+font-size:14px;
+margin-top:10px;
+padding:10px;
+background:#020617;
+border-radius:10px
+}
+
+.guide{
+margin-top:10px;
+font-size:14px;
+background:#020617;
+padding:12px;
+border-radius:10px
+}
+
+canvas{
+width:100%;
+background:#020617;
+border-radius:12px;
+padding:10px
+}
+
+.small{
+color:var(--muted);
+font-size:13px
+}
+
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<h1>Calorie Tracker Pro</h1>
+
+<div class="card">
+<h2>Daily Calories</h2>
+
+<div>Goal: <span id="goal">2700</span></div>
+<div>Eaten: <span id="eaten">0</span></div>
+<div class="stat-big">Remaining: <span id="remaining">2700</span></div>
+
+<div class="progress"><div id="progress" class="progress-bar"></div></div>
+
+<br>
+
+<input id="calInput" type="number" placeholder="Calories">
+<button onclick="addCalories()">Add</button>
+
+<div class="quick-buttons">
+<button onclick="quickAdd(200)">+200</button>
+<button onclick="quickAdd(400)">+400</button>
+<button onclick="quickAdd(600)">+600</button>
+<button onclick="quickAdd(800)">+800</button>
+</div>
+
+<div id="pace" class="pace"></div>
+
+<div id="guide" class="guide"></div>
+
+</div>
+
+<div class="grid">
+
+<div class="card">
+<h2>Meals</h2>
+
+<div class="meal">Breakfast <span id="breakfast">0</span></div>
+<div class="meal">Lunch <span id="lunch">0</span></div>
+<div class="meal">Dinner <span id="dinner">0</span></div>
+<div class="meal">Snacks <span id="snacks">0</span></div>
+
+</div>
+
+<div class="card">
+<h2>Today</h2>
+
+<div class="timer" id="timer"></div>
+
+<h3>Streak</h3>
+<div id="streak" class="streak">0 days</div>
+
+<h3>Weekly Avg Calories</h3>
+<div id="weeklyAvg">0</div>
+
+</div>
+
+</div>
+
+<div class="card">
+<h2>Weight Progress</h2>
+
+<input id="weightInput" type="number" placeholder="Weight">
+<button onclick="addWeight()">Log Weight</button>
+
+<canvas id="weightChart" height="220"></canvas>
+
+<div class="small">Track your weight to monitor bulking progress</div>
+
+</div>
+
+<div class="card">
+<h2>Calendar</h2>
+<div id="calendar" class="calendar"></div>
+</div>
+
+</div>
+
+<script>
+
+const GOAL = 2700
+
+let store = JSON.parse(localStorage.getItem("trackerPro") || "{}")
+
+if(!store.days) store.days = {}
+if(!store.weights) store.weights = []
+
+function key(date){
+return date.getFullYear()+"-"+(date.getMonth()+1)+"-"+date.getDate()
+}
+
+function today(){ return key(new Date()) }
+
+if(!store.days[today()]){
+store.days[today()] = {eaten:0,meals:{breakfast:0,lunch:0,dinner:0,snacks:0}}
+}
+
+function save(){
+localStorage.setItem("trackerPro", JSON.stringify(store))
+}
+
+function addCalories(){
+let val = Number(calInput.value)
+if(!val) return
+
+let day = store.days[today()]
+
+day.eaten += val
+
+if(day.meals.breakfast == 0) day.meals.breakfast += val
+else if(day.meals.lunch == 0) day.meals.lunch += val
+else if(day.meals.dinner == 0) day.meals.dinner += val
+else day.meals.snacks += val
+
+save()
+updateUI()
+}
+
+function quickAdd(v){
+let day = store.days[today()]
+
+day.eaten += v
+
+day.meals.snacks += v
+
+save()
+updateUI()
+}
+
+function updateTimer(){
+let now = new Date()
+let end = new Date()
+end.setHours(23,59,59,999)
+
+let diff = end - now
+
+let h = Math.floor(diff/1000/60/60)
+let m = Math.floor((diff/1000/60)%60)
+
+ timer.innerText = h+"h "+m+"m remaining"
+
+ updateGuide(h)
+ updatePace()
+}
+
+function updateGuide(hoursLeft){
+let eaten = store.days[today()].eaten
+let remaining = Math.max(GOAL-eaten,0)
+
+let mealsLeft = Math.max(Math.ceil(hoursLeft/3),1)
+let perMeal = Math.round(remaining/mealsLeft)
+
+if(remaining <= 0){
+ guide.innerText = "Goal reached today 🎉"
+ return
+}
+
+guide.innerText = "Eat about "+perMeal+" calories every ~3 hours ("+mealsLeft+" meals left)."
+}
+
+function updatePace(){
+let now = new Date()
+let hour = now.getHours()
+
+let expected = (hour/24) * GOAL
+let eaten = store.days[today()].eaten
+
+let diff = eaten - expected
+
+if(diff > 150)
+pace.innerText = "You are ahead of calorie pace 👍"
+
+else if(diff < -150)
+pace.innerText = "You are behind pace — consider eating soon"
+
+else
+pace.innerText = "You are on track for today's goal"
+}
+
+function updateWeeklyAvg(){
+let total = 0
+let count = 0
+
+for(let i=0;i<7;i++){
+let d = new Date()
+d.setDate(d.getDate()-i)
+
+let k = key(d)
+
+if(store.days[k]){
+total += store.days[k].eaten
+count++
+}
+}
+
+let avg = count ? Math.round(total/count) : 0
+
+weeklyAvg.innerText = avg
+}
+
+function buildCalendar(){
+calendar.innerHTML = ""
+
+for(let i=1;i<=31;i++){
+let d = document.createElement("div")
+d.className = "day"
+
+let k = new Date().getFullYear()+"-"+(new Date().getMonth()+1)+"-"+i
+
+if(store.days[k]){
+if(store.days[k].eaten >= GOAL)
+d.classList.add("green")
+else
+d.classList.add("red")
+}
+
+calendar.appendChild(d)
+}
+}
+
+function updateStreak(){
+let streak = 0
+let d = new Date()
+
+while(true){
+let k = key(d)
+
+if(store.days[k] && store.days[k].eaten >= GOAL){
+streak++
+d.setDate(d.getDate()-1)
+}else break
+}
+
+streakEl = document.getElementById("streak")
+streakEl.innerText = streak + " days"
+}
+
+function addWeight(){
+let w = Number(weightInput.value)
+if(!w) return
+
+store.weights.push({date:today(),weight:w})
+
+if(store.weights.length > 90)
+store.weights.shift()
+
+save()
+drawWeightChart()
+}
+
+function drawWeightChart(){
+let c = document.getElementById("weightChart")
+let ctx = c.getContext("2d")
+
+ctx.clearRect(0,0,c.width,c.height)
+
+let data = store.weights
+
+if(data.length < 2) return
+
+let max = Math.max(...data.map(x=>x.weight))
+let min = Math.min(...data.map(x=>x.weight))
+
+for(let i=1;i<data.length;i++){
+
+let x1 = (i-1)/(data.length-1) * c.width
+let x2 = i/(data.length-1) * c.width
+
+let y1 = c.height - ((data[i-1].weight-min)/(max-min))*c.height
+let y2 = c.height - ((data[i].weight-min)/(max-min))*c.height
+
+ctx.beginPath()
+ctx.moveTo(x1,y1)
+ctx.lineTo(x2,y2)
+ctx.stroke()
+}
+}
+
+function reminderLoop(){
+let now = new Date()
+
+if(now.getMinutes() == 0){
+let eaten = store.days[today()].eaten
+
+if(eaten < GOAL){
+console.log("Reminder: eat a meal to stay on track")
+}
+}
+}
+
+function updateUI(){
+let day = store.days[today()]
+
+let eaten = day.eaten
+let remaining = Math.max(GOAL-eaten,0)
+
+goal.innerText = GOAL
+
+document.getElementById("eaten").innerText = eaten
+
+document.getElementById("remaining").innerText = remaining
+
+breakfast.innerText = day.meals.breakfast
+lunch.innerText = day.meals.lunch
+dinner.innerText = day.meals.dinner
+snacks.innerText = day.meals.snacks
+
+progress.style.width = (eaten/GOAL*100)+"%"
+
+updateWeeklyAvg()
+updateStreak()
+buildCalendar()
+drawWeightChart()
+}
+
+setInterval(updateTimer,1000)
+setInterval(reminderLoop,60000)
+
+updateUI()
+updateTimer()
+
+</script>
+
+</body>
+</html>
