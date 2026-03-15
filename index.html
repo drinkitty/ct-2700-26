@@ -461,15 +461,3 @@ updateTimer()
 
 </body>
 </html>
-
-// ===== Service Worker Registration =====
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').then(reg => {
-    console.log('Service Worker registered', reg);
-  });
-
-  // Auto-refresh when a new service worker takes over
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    window.location.reload();
-  });
-}
