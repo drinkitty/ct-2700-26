@@ -639,6 +639,102 @@ canvas {
   margin-top: 8px;
 }
 
+/* ── MEAL ACCORDION ── */
+.meal-accordion { display: flex; flex-direction: column; gap: 6px; }
+
+.meal-section { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+
+.meal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 14px;
+  cursor: pointer;
+  background: var(--card2);
+  user-select: none;
+  transition: background .15s;
+}
+
+.meal-header:hover { background: var(--border); }
+
+.meal-header-left { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+
+.meal-header-right { display: flex; align-items: center; gap: 10px; }
+
+.meal-total {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-bright);
+  font-variant-numeric: tabular-nums;
+}
+
+.meal-chevron {
+  font-size: 10px;
+  color: var(--muted);
+  transition: transform .2s;
+}
+
+.meal-section.open .meal-chevron { transform: rotate(180deg); }
+
+.meal-entries {
+  display: none;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+}
+
+.meal-section.open .meal-entries { display: flex; }
+
+.meal-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  gap: 10px;
+}
+
+.meal-entry:last-child { border-bottom: none; }
+
+.meal-entry-time {
+  font-size: 11px;
+  color: var(--muted);
+  min-width: 44px;
+  font-variant-numeric: tabular-nums;
+}
+
+.meal-entry-cal {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.meal-entry-del {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--muted2);
+  font-size: 12px;
+  padding: 3px 8px;
+  cursor: pointer;
+  font-family: var(--sans);
+  transition: all .15s;
+}
+
+.meal-entry-del:hover {
+  background: rgba(237,66,69,.15);
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.meal-empty {
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--muted);
+  font-style: italic;
+}
+
 </style>
 </head>
 <body>
@@ -744,10 +840,10 @@ canvas {
 
     <div class="card">
       <div class="card-label">Meals Today</div>
-      <div class="meal-row"><span><span class="meal-icon">🌅</span>Breakfast</span><span class="meal-cal" id="breakfast">0</span></div>
-      <div class="meal-row"><span><span class="meal-icon">☀️</span>Lunch</span><span class="meal-cal" id="lunch">0</span></div>
-      <div class="meal-row"><span><span class="meal-icon">🌙</span>Dinner</span><span class="meal-cal" id="dinner">0</span></div>
-      <div class="meal-row"><span><span class="meal-icon">🍎</span>Snacks</span><span class="meal-cal" id="snacks">0</span></div>
+
+      <div class="meal-accordion" id="mealAccordion">
+        <!-- built by JS -->
+      </div>
 
       <div style="margin-top:16px">
         <button class="btn ghost" onclick="showResetConfirm()" style="font-size:12px;padding:8px 14px">Reset Today</button>
@@ -847,9 +943,18 @@ function dateKey(d) {
 function todayKey() { return dateKey(new Date()); }
 
 function ensureToday() {
-  if (!store.days[todayKey()]) {
-    store.days[todayKey()] = { eaten: 0, meals: { breakfast: 0, lunch: 0, dinner: 0, snacks: 0 } };
+  const k = todayKey();
+  if (!store.days[k]) {
+    store.days[k] = { eaten: 0, meals: { breakfast: [], lunch: [], dinner: [], snacks: [] } };
   }
+  // migrate old format (meals stored as numbers) to new log format
+  const meals = store.days[k].meals;
+  ['breakfast','lunch','dinner','snacks'].forEach(m => {
+    if (typeof meals[m] === 'number') {
+      meals[m] = meals[m] > 0 ? [{ cal: meals[m], time: '?' }] : [];
+    }
+    if (!Array.isArray(meals[m])) meals[m] = [];
+  });
 }
 
 // ── LOCAL STORAGE LOAD/SAVE ──
@@ -912,8 +1017,11 @@ function undoLast() {
   if (!lastAction) return;
   const day = store.days[todayKey()];
   if (!day) return;
+  const log = day.meals[lastAction.meal];
+  // remove the last entry matching this calorie amount
+  const idx = log.map(e => e.cal).lastIndexOf(lastAction.calories);
+  if (idx !== -1) log.splice(idx, 1);
   day.eaten = Math.max(0, day.eaten - lastAction.calories);
-  day.meals[lastAction.meal] = Math.max(0, day.meals[lastAction.meal] - lastAction.calories);
   lastAction = null;
   clearTimeout(undoTimer);
   document.getElementById("undoBar").classList.remove("show");
@@ -942,6 +1050,72 @@ function renderNote() {
   el.style.fontStyle = note ? "normal" : "italic";
 }
 
+// ── MEAL ACCORDION ──
+const MEAL_META = {
+  breakfast: { icon: '🌅', label: 'Breakfast' },
+  lunch:     { icon: '☀️', label: 'Lunch' },
+  dinner:    { icon: '🌙', label: 'Dinner' },
+  snacks:    { icon: '🍎', label: 'Snacks' }
+};
+
+// track which meals are open
+const openMeals = new Set(['breakfast']);
+
+function toggleMeal(meal) {
+  openMeals.has(meal) ? openMeals.delete(meal) : openMeals.add(meal);
+  renderMealAccordion();
+}
+
+function deleteMealEntry(meal, index) {
+  const day = store.days[todayKey()];
+  if (!day) return;
+  const entry = day.meals[meal][index];
+  if (!entry) return;
+  day.eaten = Math.max(0, day.eaten - entry.cal);
+  day.meals[meal].splice(index, 1);
+  save();
+  updateUI();
+  showToast("Removed " + entry.cal + " cal from " + meal);
+}
+
+function renderMealAccordion() {
+  const el = document.getElementById("mealAccordion");
+  if (!el) return;
+  ensureToday();
+  const day = store.days[todayKey()];
+
+  el.innerHTML = Object.keys(MEAL_META).map(meal => {
+    const { icon, label } = MEAL_META[meal];
+    const entries = day.meals[meal] || [];
+    const total = entries.reduce((s, e) => s + e.cal, 0);
+    const isOpen = openMeals.has(meal);
+
+    const entriesHTML = entries.length === 0
+      ? `<div class="meal-empty">Nothing logged yet</div>`
+      : entries.map((e, i) => `
+          <div class="meal-entry">
+            <span class="meal-entry-time">${e.time}</span>
+            <span class="meal-entry-cal">${e.cal} cal</span>
+            <button class="meal-entry-del" onclick="deleteMealEntry('${meal}', ${i})">✕</button>
+          </div>`).join('');
+
+    return `
+      <div class="meal-section${isOpen ? ' open' : ''}" id="ms-${meal}">
+        <div class="meal-header" onclick="toggleMeal('${meal}')">
+          <div class="meal-header-left">
+            <span>${icon}</span>
+            <span>${label}</span>
+          </div>
+          <div class="meal-header-right">
+            <span class="meal-total">${total} cal</span>
+            <span class="meal-chevron">▼</span>
+          </div>
+        </div>
+        <div class="meal-entries">${entriesHTML}</div>
+      </div>`;
+  }).join('');
+}
+
 // ── MEAL SELECTOR ──
 function selectMeal(meal) {
   activeMeal = meal;
@@ -951,12 +1125,18 @@ function selectMeal(meal) {
 }
 
 // ── ADD CALORIES ──
+function nowTime() {
+  const n = new Date();
+  return String(n.getHours()).padStart(2,'0') + ':' + String(n.getMinutes()).padStart(2,'0');
+}
+
 function addCalories() {
   const val = Number(document.getElementById("calInput").value);
   if (!val || val <= 0) return;
   ensureToday();
-  store.days[todayKey()].eaten += val;
-  store.days[todayKey()].meals[activeMeal] += val;
+  const day = store.days[todayKey()];
+  day.eaten += val;
+  day.meals[activeMeal].push({ cal: val, time: nowTime() });
   document.getElementById("calInput").value = "";
   lastAction = { calories: val, meal: activeMeal };
   showUndoBar("Added " + val + " cal to " + activeMeal);
@@ -967,8 +1147,9 @@ function addCalories() {
 
 function quickAdd(v) {
   ensureToday();
-  store.days[todayKey()].eaten += v;
-  store.days[todayKey()].meals[activeMeal] += v;
+  const day = store.days[todayKey()];
+  day.eaten += v;
+  day.meals[activeMeal].push({ cal: v, time: nowTime() });
   lastAction = { calories: v, meal: activeMeal };
   showUndoBar("Added " + v + " cal to " + activeMeal);
   save();
@@ -988,7 +1169,7 @@ function confirmReset() {
 }
 
 function resetToday() {
-  store.days[todayKey()] = { eaten: 0, meals: { breakfast: 0, lunch: 0, dinner: 0, snacks: 0 } };
+  store.days[todayKey()] = { eaten: 0, meals: { breakfast: [], lunch: [], dinner: [], snacks: [] } };
   save();
   updateUI();
   showToast("Today reset ✓");
@@ -1316,11 +1497,7 @@ function updateUI() {
 
   document.getElementById("pct").textContent = pct + "%";
 
-  document.getElementById("breakfast").textContent = day.meals.breakfast;
-  document.getElementById("lunch").textContent = day.meals.lunch;
-  document.getElementById("dinner").textContent = day.meals.dinner;
-  document.getElementById("snacks").textContent = day.meals.snacks;
-
+  renderMealAccordion();
   updateWeeklyAvg();
   updateStreak();
   buildCalendar();
