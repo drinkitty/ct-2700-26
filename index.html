@@ -15,8 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
 
 <style>
 :root {
@@ -539,6 +538,107 @@ canvas {
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted2); }
 
+/* ── UNDO BAR ── */
+#undoBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--muted);
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity .2s ease, transform .2s ease;
+  pointer-events: none;
+}
+
+#undoBar.show {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: all;
+}
+
+#undoBar .undo-btn {
+  background: rgba(88,101,242,.2);
+  color: var(--accent-light);
+  border: 1px solid rgba(88,101,242,.4);
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  cursor: pointer;
+  font-family: var(--sans);
+  transition: background .15s;
+}
+
+#undoBar .undo-btn:hover { background: rgba(88,101,242,.35); }
+
+/* ── NOTES ── */
+.note-input-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.note-input-row input {
+  flex: 1;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 8px 12px;
+  outline: none;
+  transition: border-color .15s;
+  font-family: var(--sans);
+}
+
+.note-input-row input:focus { border-color: var(--accent); }
+.note-input-row input::placeholder { color: var(--muted2); }
+
+.note-display {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  font-style: italic;
+  min-height: 18px;
+}
+
+/* ── SETTINGS ── */
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.settings-row input {
+  width: 110px;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-bright);
+  font-size: 15px;
+  font-weight: 700;
+  padding: 8px 12px;
+  outline: none;
+  transition: border-color .15s;
+  font-family: var(--sans);
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-row input:focus { border-color: var(--accent); }
+
+.settings-hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 8px;
+}
+
 </style>
 </head>
 <body>
@@ -557,6 +657,17 @@ canvas {
   <div class="header">
     <h1>Calorie<span>Pro</span></h1>
     <div class="status-pill live" id="syncStatus">synced</div>
+  </div>
+
+  <!-- Settings -->
+  <div class="card">
+    <div class="card-label">Settings</div>
+    <div class="settings-row">
+      <span style="font-size:14px;color:var(--text)">Daily Calorie Goal</span>
+      <input id="goalInput" type="number" inputmode="numeric" placeholder="2700">
+      <button class="btn" onclick="saveGoal()">Save</button>
+    </div>
+    <div class="settings-hint">Your current goal is <strong id="goalDisplay">2700</strong> cal/day. Change it any time you recalculate.</div>
   </div>
 
   <!-- Main Calorie Card -->
@@ -621,6 +732,11 @@ canvas {
       </div>
     </div>
 
+    <div id="undoBar">
+      <span id="undoMsg">—</span>
+      <button class="undo-btn" onclick="undoLast()">↩ Undo</button>
+    </div>
+
   </div>
 
   <!-- Grid: Meals + Today -->
@@ -639,6 +755,15 @@ canvas {
           Sure? &nbsp;
           <button class="btn" onclick="confirmReset()" style="font-size:12px;padding:6px 14px;background:var(--red)">Yes, reset</button>
           <button class="btn ghost" onclick="cancelReset()" style="font-size:12px;padding:6px 14px">Cancel</button>
+        </div>
+      </div>
+
+      <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:14px">
+        <div class="card-label" style="margin-bottom:6px">Today's Note</div>
+        <div class="note-display" id="noteDisplay">No note for today.</div>
+        <div class="note-input-row">
+          <input id="noteInput" type="text" placeholder="e.g. cheat day, sick, post-workout..." maxlength="100">
+          <button class="btn ghost" onclick="saveNote()" style="font-size:13px;padding:8px 14px">Save</button>
         </div>
       </div>
     </div>
@@ -704,31 +829,16 @@ canvas {
 
 <script>
 
-// ── FIREBASE ──
-const firebaseConfig = {
-  apiKey: "AIzaSyDcjrTVtXgdkdSB04JKjTxKRMyb6tL0_pQ",
-  authDomain: "calorie-tracker-83e1b.firebaseapp.com",
-  projectId: "calorie-tracker-83e1b",
-  storageBucket: "calorie-tracker-83e1b.appspot.com",
-  messagingSenderId: "201471328542",
-  appId: "1:201471328542:web:f8c57efa341410ae13890f"
-};
-
-let db = null;
-try {
-  firebase.initializeApp(firebaseConfig);
-  db = firebase.firestore();
-} catch(e) {
-  console.warn("Firebase init failed:", e);
-}
-
 // ── CONSTANTS ──
-const GOAL = 2700;
+const STORAGE_KEY = 'calorie-tracker-data';
 
 // ── STATE ──
-let store = { days: {}, weights: [] };
+let store = { days: {}, weights: [], goal: 2700 };
 let activeMeal = 'breakfast';
-let saveTimeout = null;
+let lastAction = null;
+let undoTimer = null;
+
+function getGoal() { return store.goal || 2700; }
 
 // ── DATE HELPERS ──
 function dateKey(d) {
@@ -742,53 +852,94 @@ function ensureToday() {
   }
 }
 
-// ── FIREBASE LOAD/SAVE ──
-async function loadData() {
-  // Timeout: if Firebase takes more than 6s, go offline
-  const timeout = setTimeout(() => {
-    document.getElementById("loading").style.display = "none";
-    showToast("Offline — data not synced");
-    setSyncStatus(false, "offline");
-    ensureToday();
-    updateUI();
-  }, 6000);
-
+// ── LOCAL STORAGE LOAD/SAVE ──
+function loadData() {
   try {
-    if (!db) throw new Error("Firebase not available");
-    const doc = await db.collection("tracker").doc("data").get();
-    if (doc.exists) store = doc.data();
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) store = JSON.parse(saved);
     if (!store.weights) store.weights = [];
     if (!store.days) store.days = {};
-    clearTimeout(timeout);
+    if (!store.goal) store.goal = 2700;
+    if (!store.notes) store.notes = {};
   } catch(e) {
-    clearTimeout(timeout);
-    console.warn("Firebase load failed, using local state:", e);
-    showToast("Offline mode — data won't sync");
-    setSyncStatus(false, "offline");
+    console.warn("Failed to load local data:", e);
   }
   ensureToday();
   document.getElementById("loading").style.display = "none";
+  setSyncStatus();
   updateUI();
 }
 
-function scheduleSave() {
-  if (!db) { setSyncStatus(false, "offline"); return; }
-  setSyncStatus(false, "saving…");
-  clearTimeout(saveTimeout);
-  saveTimeout = setTimeout(async () => {
-    try {
-      await db.collection("tracker").doc("data").set(store);
-      setSyncStatus(true);
-    } catch(e) {
-      setSyncStatus(false, "offline");
-    }
-  }, 800);
+function save() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+    setSyncStatus();
+  } catch(e) {
+    console.warn("Failed to save:", e);
+  }
 }
 
-function setSyncStatus(ok, msg) {
+function setSyncStatus() {
   const el = document.getElementById("syncStatus");
-  el.textContent = msg || (ok ? "synced" : "offline");
-  el.className = "status-pill " + (ok ? "live" : "");
+  el.textContent = "saved locally";
+  el.className = "status-pill live";
+}
+
+// ── GOAL SETTINGS ──
+function saveGoal() {
+  const val = Number(document.getElementById("goalInput").value);
+  if (!val || val < 100 || val > 10000) { showToast("Enter a valid goal (100–10000)"); return; }
+  store.goal = val;
+  save();
+  updateUI();
+  document.getElementById("goalInput").value = "";
+  showToast("Goal updated to " + val + " cal ✓");
+}
+
+// ── UNDO ──
+function showUndoBar(msg) {
+  const bar = document.getElementById("undoBar");
+  document.getElementById("undoMsg").textContent = msg;
+  bar.classList.add("show");
+  clearTimeout(undoTimer);
+  undoTimer = setTimeout(() => {
+    bar.classList.remove("show");
+    lastAction = null;
+  }, 8000);
+}
+
+function undoLast() {
+  if (!lastAction) return;
+  const day = store.days[todayKey()];
+  if (!day) return;
+  day.eaten = Math.max(0, day.eaten - lastAction.calories);
+  day.meals[lastAction.meal] = Math.max(0, day.meals[lastAction.meal] - lastAction.calories);
+  lastAction = null;
+  clearTimeout(undoTimer);
+  document.getElementById("undoBar").classList.remove("show");
+  save();
+  updateUI();
+  showToast("Undone ✓");
+}
+
+// ── NOTES ──
+function saveNote() {
+  const val = document.getElementById("noteInput").value.trim();
+  if (!store.notes) store.notes = {};
+  store.notes[todayKey()] = val;
+  save();
+  renderNote();
+  document.getElementById("noteInput").value = "";
+  showToast(val ? "Note saved ✓" : "Note cleared");
+}
+
+function renderNote() {
+  const el = document.getElementById("noteDisplay");
+  if (!el) return;
+  const note = store.notes && store.notes[todayKey()];
+  el.textContent = note ? "📝 " + note : "No note for today.";
+  el.style.color = note ? "var(--text)" : "var(--muted)";
+  el.style.fontStyle = note ? "normal" : "italic";
 }
 
 // ── MEAL SELECTOR ──
@@ -807,7 +958,9 @@ function addCalories() {
   store.days[todayKey()].eaten += val;
   store.days[todayKey()].meals[activeMeal] += val;
   document.getElementById("calInput").value = "";
-  scheduleSave();
+  lastAction = { calories: val, meal: activeMeal };
+  showUndoBar("Added " + val + " cal to " + activeMeal);
+  save();
   updateUI();
   showToast("+" + val + " cal to " + activeMeal);
 }
@@ -816,7 +969,9 @@ function quickAdd(v) {
   ensureToday();
   store.days[todayKey()].eaten += v;
   store.days[todayKey()].meals[activeMeal] += v;
-  scheduleSave();
+  lastAction = { calories: v, meal: activeMeal };
+  showUndoBar("Added " + v + " cal to " + activeMeal);
+  save();
   updateUI();
   showToast("+" + v + " cal");
 }
@@ -834,7 +989,7 @@ function confirmReset() {
 
 function resetToday() {
   store.days[todayKey()] = { eaten: 0, meals: { breakfast: 0, lunch: 0, dinner: 0, snacks: 0 } };
-  scheduleSave();
+  save();
   updateUI();
   showToast("Today reset ✓");
 }
@@ -846,7 +1001,7 @@ function addWeight() {
   store.weights.push({ date: todayKey(), weight: w });
   if (store.weights.length > 90) store.weights.shift();
   document.getElementById("weightInput").value = "";
-  scheduleSave();
+  save();
   drawWeightChart();
   renderWeightLog();
   showToast("Weight logged: " + w);
@@ -854,7 +1009,7 @@ function addWeight() {
 
 function deleteWeight(index) {
   store.weights.splice(index, 1);
-  scheduleSave();
+  save();
   drawWeightChart();
   renderWeightLog();
   showToast("Entry removed");
@@ -888,7 +1043,8 @@ function updateTimer() {
   const h = Math.floor(diff / 3600000);
   const m = Math.floor((diff % 3600000) / 60000);
   document.getElementById("timer").textContent = h + "h " + String(m).padStart(2,'0') + "m";
-  updateGuide(h);
+  const hoursLeftFractional = diff / 3600000;
+  updateGuide(hoursLeftFractional);
   updatePace();
 }
 
@@ -896,27 +1052,65 @@ function updateTimer() {
 function updateGuide(hoursLeft) {
   if (!store.days[todayKey()]) return;
   const eaten = store.days[todayKey()].eaten;
-  const remaining = Math.max(GOAL - eaten, 0);
+  const remaining = Math.max(getGoal() - eaten, 0);
   const el = document.getElementById("guide");
+
   if (remaining <= 0) {
     el.textContent = "🎉 Goal reached!";
     return;
   }
-  const mealsLeft = Math.max(Math.ceil(hoursLeft / 3), 1);
+
+  // If fewer than 1.5 hours left, it's too late to realistically hit the goal
+  if (hoursLeft < 1.5) {
+    if (remaining > 500) {
+      el.textContent = "Too late to hit goal today — aim for " + getGoal() + " tomorrow";
+    } else {
+      el.textContent = "Almost done — squeeze in a small snack if you can";
+    }
+    return;
+  }
+
+  // Cap per-meal size at 900 cal (realistic max for one sitting)
+  // and floor it at 150 cal (not worth suggesting tiny amounts)
+  const mealsLeft = Math.max(Math.floor(hoursLeft / 3), 1);
   const perMeal = Math.round(remaining / mealsLeft);
-  el.textContent = "~" + perMeal + " cal per meal (" + mealsLeft + " left)";
+
+  if (perMeal > 900) {
+    // Too much to eat in the time left — be honest about it
+    const maxRealistic = Math.round(mealsLeft * 900);
+    el.textContent = "Tough to hit goal — aim for ~" + maxRealistic + " more cal across " + mealsLeft + " meal" + (mealsLeft > 1 ? "s" : "");
+  } else if (perMeal < 150) {
+    el.textContent = "You're nearly there — one small snack should do it";
+  } else {
+    el.textContent = "~" + perMeal + " cal per meal, " + mealsLeft + " meal" + (mealsLeft > 1 ? "s" : "") + " left today";
+  }
 }
 
 function updatePace() {
   if (!store.days[todayKey()]) return;
-  const hour = new Date().getHours() + new Date().getMinutes() / 60;
-  const expected = (hour / 24) * GOAL;
+  const now = new Date();
+  const hour = now.getHours() + now.getMinutes() / 60;
   const eaten = store.days[todayKey()].eaten;
-  const diff = eaten - expected;
   const el = document.getElementById("pace");
-  if (diff > 150) el.textContent = "Ahead of pace 👍";
-  else if (diff < -150) el.textContent = "Behind pace — eat soon";
-  else el.textContent = "On track ✓";
+
+  // Don't show pace before 7am — no meaningful data yet
+  if (hour < 7) {
+    el.textContent = "Day just started — start eating when ready";
+    return;
+  }
+
+  // Expected by now based on a 7am–10pm eating window (15 hrs)
+  const windowStart = 7;
+  const windowEnd = 22;
+  const windowProgress = Math.min(Math.max((hour - windowStart) / (windowEnd - windowStart), 0), 1);
+  const expected = windowProgress * getGoal();
+  const diff = eaten - expected;
+
+  if (diff > 300) el.textContent = "Well ahead of pace 👍";
+  else if (diff > 100) el.textContent = "Slightly ahead of pace";
+  else if (diff < -400) el.textContent = "Far behind pace — eat a big meal soon";
+  else if (diff < -150) el.textContent = "Behind pace — consider eating soon";
+  else el.textContent = "On track for today ✓";
 }
 
 // ── WEEKLY AVG ──
@@ -937,7 +1131,7 @@ function updateStreak() {
   const d = new Date();
   for (let i = 0; i < 365; i++) {
     const k = dateKey(d);
-    if (store.days[k] && store.days[k].eaten >= GOAL) {
+    if (store.days[k] && store.days[k].eaten >= getGoal()) {
       streak++;
       d.setDate(d.getDate() - 1);
     } else break;
@@ -974,7 +1168,7 @@ function buildCalendar() {
 
     const k = year + "-" + (month + 1) + "-" + i;
     if (store.days[k]) {
-      d.classList.add(store.days[k].eaten >= GOAL ? "green" : "red");
+      d.classList.add(store.days[k].eaten >= getGoal() ? "green" : "red");
     }
 
     if (i === todayNum) d.classList.add("today-marker");
@@ -1103,13 +1297,14 @@ function updateUI() {
   ensureToday();
   const day = store.days[todayKey()];
   const eaten = day.eaten;
-  const remaining = Math.max(GOAL - eaten, 0);
-  const pct = Math.min(Math.round(eaten / GOAL * 100), 100);
-  const over = eaten > GOAL;
+  const remaining = Math.max(getGoal() - eaten, 0);
+  const pct = Math.min(Math.round(eaten / getGoal() * 100), 100);
+  const over = eaten > getGoal();
 
-  document.getElementById("goal").textContent = GOAL;
+  document.getElementById("goal").textContent = getGoal();
+  document.getElementById("goalDisplay").textContent = getGoal();
   document.getElementById("eaten").textContent = eaten;
-  document.getElementById("remaining").textContent = over ? "+" + (eaten - GOAL) + " over" : remaining;
+  document.getElementById("remaining").textContent = over ? "+" + (eaten - getGoal()) + " over" : remaining;
 
   const rBox = document.getElementById("remainingBox");
   rBox.classList.toggle("over", over);
@@ -1131,6 +1326,7 @@ function updateUI() {
   buildCalendar();
   drawWeightChart();
   renderWeightLog();
+  renderNote();
   updateDateDisplay();
 }
 
@@ -1149,8 +1345,15 @@ document.getElementById("calInput").addEventListener("keydown", e => {
 
 document.getElementById("weightInput").addEventListener("keydown", e => {
   if (e.key === "Enter") addWeight();
+});
+
+document.getElementById("goalInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") saveGoal();
+});
+
+document.getElementById("noteInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") saveNote();
 });</script>
 
-</script>
 </body>
 </html>
